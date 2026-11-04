@@ -33,19 +33,38 @@ section {
 
 label {
     display:inline-block;
-    margin:8px 18px 8px 0;
+    margin:10px 20px 10px 0;
+    text-indent:6px;
   }
 
 select,input,button {
     font:inherit;
-    padding:9px;
+    padding:10px 12px;
+    background:#fff;
+    color:#183329;
     border:1px solid #abbeb4;
-    border-radius:6px;
+    border-radius:8px;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+
+select:focus,input:focus,button:focus {
+    outline:none;
+    border-color:#13664d;
+    box-shadow:0 0 0 3px rgba(19,102,77,.15);
+  }
+
+select {
+    min-width:120px;
   }
 
 input {
-    width:90px;
+    width:92px;
   }
+
+/* no number spinners for a cleaner look */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+input[type=number] { -moz-appearance:textfield; }
 
 small {
     color:#52645b;
