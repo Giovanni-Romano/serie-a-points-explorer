@@ -3,10 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Serie A • Historical points explorer</title>
+  <title>Serie A • Points by league position</title>
 
   <!-- 1. APPEARANCE: CSS only. -->
   <style>
+  #chart-error {
+    color:#8a1f1f;
+    background:#fdecea;
+    border:1px solid #f5b7b1;
+    border-left:6px solid #c0392b;
+    padding:18px;
+    border-radius:8px;
+    font-size:16px;
+    line-height:1.6;
+    text-align:center;
+    min-height:60px;
+  }
+
   body {
     font:16px system-ui;
     background:#f3f5f3;
@@ -176,6 +189,39 @@ a {
     color:#13664d;
   }
 
+.nav {
+    margin:0 0 6px;
+    font-size:14px;
+  }
+
+.legend {
+    margin:10px 0 0;
+    font-size:14px;
+    color:#52645b;
+  }
+
+.legend .k {
+    display:inline-block;
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    margin:0 3px 0 12px;
+    vertical-align:-1px;
+  }
+
+.legend .k:first-child {
+    margin-left:0;
+  }
+
+.legend .k.current {
+    background:#c0392b;
+  }
+
+.legend .k.history {
+    background:rgba(35,124,96,.28);
+    border:1px solid rgba(35,124,96,.8);
+  }
+
 #importstatus {
     color:#52645b;
     font-size:13px;
@@ -209,34 +255,30 @@ a {
 
   <!-- 2. PAGE CONTENT: introductions, controls, methodology, and table. -->
   <main>
+    <p class="nav"><a href="./analysis.html">Detailed analysis for one position →</a></p>
     <small>FOOTBALL / HISTORICAL EVIDENCE</small>
-    <h1>How unusual is this table?</h1>
-    <p>Compare Serie A points <b>P</b> at position <b>n</b> after each club’s first <b>M</b> completed matches. All seasons use 3 points for a win. 
-    </br></br> See <i>Methods, coverage, and limitations</i> for more details.</p>
+    <h1>Points by league position after M matches</h1>
+    <p>Compare Serie A points <b>P</b> at every league position after each club’s first <b>M</b> completed matches, across all seasons using 3 points for a win. One dot per historical season; the chosen season is highlighted in red. 
+    </br></br> See <i>Method, coverage and limitations</i> for more details.</p>
 
     <!-- PAGE SECTION: edit the visible wording below. -->
     <section>
-      <label>Position (n)<br><input id="n" type="number" min="1" max="20" value="1"></label>
       <label>Matches (M)<br><input id="m" type="number" min="1" max="42" value="10"></label>
+      <label>Positions<br><input id="pos" value="1-20" placeholder="e.g. 1-20" spellcheck="false" autocomplete="off"></label>
       <label>Target season<br><select id="season"></select></label>
-      <label>Test points (P)<br><input id="p" type="number" min="0" placeholder="Auto"></label>
       <label>Historical cohort<br><select id="era"><option value="1929">All available years</option><option value="1994">Three-point era (1994+)</option><option value="2004">Modern era (2004+)</option></select></label>
       <label>League size<br><select id="size"><option value="0">All sizes</option><option value="20">20 clubs</option><option value="18">18 clubs</option><option value="16">16 clubs</option></select></label>
-      <p id="status"></p>
       <p id="importstatus" role="status">Checking latest Open Matchday results…</p>
       <button id="refresh" type="button">Check for updates</button>
     </section>
 
-    <!-- PAGE SECTION: edit the visible wording below. -->
+    <!-- PAGE SECTION: overview plot. -->
     <section aria-live="polite">
       <h2 id="results-title"></h2>
-      <div class="result-row">
-        <div id="result" class="metrics">
-        </div>
-        <svg id="chart" viewBox="0 0 1000 560" role="img" aria-label="Historical points by season"></svg>
-      </div>
-      <p><small>Dots: historical seasons · horizontal line: target points. Exact observations appear below. Tail frequencies are descriptive, not statistical p-values.</small></p>
-      <button id="export">Export comparison CSV</button>
+      <svg id="chart" viewBox="0 0 1000 745" role="img" aria-label="Points at each league position by season"></svg>
+      <div id="chart-error" hidden></div>
+      <p class="legend"><span class="k current"></span> target season · <span class="k history"></span> historical seasons</p>
+      <p><small>X axis: league position (1st to last). Y axis: points after M completed matches. Historical dots are shown with transparency; several overlap where positions share the same points. Seasons are included only if the target season, era and league-size filters apply and every club played M matches.</small></p>
     </section>
 
     <!-- PAGE SECTION: edit the visible wording below. -->
@@ -252,25 +294,6 @@ a {
         <p id="excluded"></p>
       </details>
     </section>
-
-    <!-- PAGE SECTION: edit the visible wording below. -->
-    <section>
-      <details>
-        <summary>Season-by-season evidence</summary>
-          <p id="evidence-error" class="evidence-error" style="display:none"></p>
-          <div id="evidenceTable" style="overflow:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Season</th><th id="clubHead">Club in position n after m matches</th><th>Points</th><th>W–D–L</th><th>Clubs</th>
-              </tr>
-            </thead>
-            <tbody id="rows">
-            </tbody>
-          </table>
-          </div>
-        </details>
-    </section>
   </main>
 
   <!-- 3. EMBEDDED DATA: fold this script in your editor; no prose to edit here. -->
@@ -281,22 +304,21 @@ a {
   <!-- 4. APP LOGIC: dynamic descriptions use .textContent assignments. -->
   <script>
 const DATA = JSON.parse(document.getElementById("embedded-data").textContent);
-const $=id=>document.getElementById(id),label=y=>y+'–'+String(y+1).slice(-2);let comparison=[];function err(){let e=$('result');e.classList.add('error');e.innerHTML='Stats cannot be computed because one or more input values are invalid.<br>Check the "Matches (M)" and "Position (n)" inputs, or the "Test points (P)" field.';let ev=$('evidence-error');ev.innerHTML='Evidence cannot be gathered because one or more input values are invalid.<br>Check the "Matches (M)" and "Position (n)" inputs, or the "Test points (P)" field.';ev.style.display='block';$('evidenceTable').style.display='none';$('status').textContent=''}
+const $=id=>document.getElementById(id),label=y=>y+'–'+String(y+1).slice(-2);function showError(){$('chart-error').textContent='This plot cannot be computed because one or more input values are invalid. Check the Matches (M), Positions, target season, historical cohort and league-size inputs, then try again.';$('chart-error').hidden=false;$('chart').style.display='none';$('results-title').textContent=''}
 function table(s,m){let ts=s.teams.map(name=>({name,w:0,d:0,l:0,gf:0,ga:0,g:0}));for(let [date,h,a,hg,ag]of s.matches){for(let [i,x,y]of [[h,hg,ag],[a,ag,hg]]){let t=ts[i];if(t.g>=m)continue;t.g++;t.gf+=x;t.ga+=y;t.w+=+(x>y);t.d+=+(x===y);t.l+=+(x<y)}}if(ts.some(t=>t.g<m))return null;return ts.map(t=>({...t,p:3*t.w+t.d})).sort((a,b)=>b.p-a.p||(b.gf-b.ga)-(a.gf-a.ga)||b.gf-a.gf||a.name.localeCompare(b.name))}
 $('season').innerHTML=DATA.seasons.slice().reverse().map(s=>`<option value="${s.y}">${label(s.y)}</option>`).join('');
 $('coverage').textContent=`${DATA.seasons.length} included seasons, ${DATA.seasons.reduce((n,s)=>n+s.matches.length,0).toLocaleString()} match results. Missing wartime seasons 1943–44 and 1944–45 are not filled.`;
 $('excluded').textContent='Quarantined seasons: '+DATA.excluded.map(s=>label(s.year)+': '+s.reasons.join('; ')).join(' · ');
-function draw(){let n=+$('n').value,m=+$('m').value,y=+$('season').value,p=$('p').value;$('clubHead').textContent=`Club in position ${n} after ${m} matches`;comparison=[];$('rows').innerHTML='';$('chart').innerHTML='';if(!Number.isInteger(n)||n<1||n>20||!Number.isInteger(m)||m<1||m>42){err();return}let s=DATA.seasons.find(s=>s.y===y),t=table(s,m),target=t?.[n-1];if(p===''){p=target?.p}else p=Number(p);$('status').textContent=target?`${label(y)}: ${target.name}, ${target.p} reconstructed points after ${m} games.`:'Target archive does not cover this position / match count. Enter observed points P to test a claim.';if(!Number.isInteger(p)||p<0||p>3*m){err();return}for(let s of DATA.seasons){if(s.y>=y||s.y<+$('era').value|| (+$('size').value&&s.teams.length!==+$('size').value))continue;let t=table(s,m);if(t?.[n-1])comparison.push({...t[n-1],year:s.y,clubs:s.teams.length})}let N=comparison.length;if(!N){err();return}let low=comparison.filter(t=>t.p<p).length,equal=comparison.filter(t=>t.p===p).length,high=N-low-equal,sorted=comparison.map(t=>t.p).sort((a,b)=>a-b),median=(sorted[Math.floor((N-1)/2)]+sorted[Math.floor(N/2)])/2,mean=sorted.reduce((a,b)=>a+b,0)/N;let freq={},mode=sorted[0],modeC=0;for(let v of sorted){freq[v]=(freq[v]||0)+1;if(freq[v]>modeC){modeC=freq[v];mode=v}}let min=sorted[0],max=sorted[N-1];$('result').classList.remove('error');$('evidenceTable').style.display='block';$('evidence-error').style.display='none';$('results-title').textContent=`Results for ${n}° place after ${m} matches`;let who=target?`${target.name} (${label(y)})`:`${label(y)}`;$('result').innerHTML=`<table><tbody><tr><th>${who}</th><td>${p}</td></tr><tr><th>Historical seasons</th><td>${N}</td></tr><tr><th>Mean</th><td>${mean.toFixed(1)}</td></tr><tr><th>Median</th><td>${median}</td></tr><tr><th>Mode</th><td>${mode}</td></tr><tr><th>Range (min–max)</th><td>${min}–${max}</td></tr><tr><th>Strictly lower</th><td>${(low/N*100).toFixed(1)}% (${low})</td></tr><tr><th>Equal</th><td>${(equal/N*100).toFixed(1)}% (${equal})</td></tr><tr><th>Strictly higher</th><td>${(high/N*100).toFixed(1)}% (${high})</td></tr></tbody></table>`;let minY=Math.min(...comparison.map(t=>t.year)),maxY=Math.max(y,minY+1),topP=Math.max(p,...sorted)+3,botP=Math.min(p,...sorted)-2,x=v=>60+(v-minY)/(maxY-minY)*900,yy=v=>500-(v-botP)/(topP-botP)*460;let svg='';for(let i=0;i<=4;i++){let v=Math.round(botP+(topP-botP)*i/4);svg+=`<line x1="60" x2="960" y1="${yy(v)}" y2="${yy(v)}" stroke="#ddd"/><text x="10" y="${yy(v)+5}" font-size="14">${v}</text>`}svg+=`<line x1="60" x2="960" y1="${yy(p)}" y2="${yy(p)}" stroke="#d36930" stroke-width="2"/>`;for(let t of comparison)svg+=`<circle cx="${x(t.year)}" cy="${yy(t.p)}" r="5" fill="#237c60"><title>${label(t.year)}: ${t.name}, ${t.p} points</title></circle>`;svg+=`<text x="60" y="535">${minY}</text><text x="900" y="535">${y}</text><text x="450" y="550">Season start year</text><text x="10" y="18">Points</text>`;$('chart').innerHTML=svg;$('chart').style.height=$('result').offsetHeight+'px';for(let t of comparison.slice().reverse()){let tr=document.createElement('tr');for(let v of [label(t.year),t.name,t.p,`${t.w}–${t.d}–${t.l}`,t.clubs]){let td=document.createElement('td');td.textContent=v;tr.append(td)}$('rows').append(tr)}}
-for(let id of ['n','m','season','p','era','size'])$(id).addEventListener('input',draw);
-$('export').onclick=()=>{let rows=[['season','club','points','wins','draws','losses','league_size'],...comparison.map(t=>[label(t.year),t.name,t.p,t.w,t.d,t.l,t.clubs])];let u=URL.createObjectURL(new Blob([rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n')],{type:'text/csv'}));let a=document.createElement('a');a.href=u;a.download='serie-a-comparison.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
+function draw(){let m=+$('m').value,y=+$('season').value;$('chart').innerHTML='';if(!Number.isInteger(m)||m<1||m>42){showError();return}let S=table(DATA.seasons.find(s=>s.y===y),m);if(!S){showError();return}let posTxt=$('pos').value.trim(),posSet=new Set();if(posTxt){let ok=true;for(let part of posTxt.split(',')){part=part.trim();if(!part)continue;let r=part.split('-'),a=+r[0],b=r.length>1?+r[1]:a;if(!Number.isInteger(a)||!Number.isInteger(b)||a<1||b<1||a>20||b>20||b<a){ok=false;break}for(let p=a;p<=b;p++)posSet.add(p)}if(!ok){showError();return}}let selArr=posSet.size?[...posSet].sort((a,b)=>a-b):Array.from({length:20},(_,i)=>i+1),minPos=selArr[0],maxPos=selArr[selArr.length-1];let keep=d=>!posSet.size||posSet.has(d.pos);let hist=[],target=S.map((t,idx)=>({pos:idx+1,name:t.name,p:t.p,year:y})).filter(keep);for(let s of DATA.seasons){if(s.y>=y||s.y<+$('era').value||(+$('size').value&&s.teams.length!==+$('size').value))continue;let T=table(s,m);if(!T)continue;T.forEach((t,idx)=>{let d={pos:idx+1,name:t.name,p:t.p,year:s.y};if(keep(d))hist.push(d)})}if(!hist.length&&!target.length){showError();return}let allP=hist.map(d=>d.p).concat(target.map(d=>d.p)),minP=Math.max(-1,Math.min(...allP)-4),maxP=Math.max(...allP)+1,L=66,R=970,Tp=45,Bp=560,XM=40,round=Math.round,x=v=>minPos===maxPos?round((L+R)/2):round((L+XM)+(v-minPos)/(maxPos-minPos)*((R-XM)-(L+XM))),yp=v=>round(Bp-(v-minP)/(maxP-minP)*(Bp-Tp)),svq='';for(let v=Math.ceil(minP/2)*2;v<=maxP;v+=2){let gy=yp(v);svq+=`<line x1="${L}" x2="${R}" y1="${gy}" y2="${gy}" stroke="#e6e8e6"/><text x="${L-20}" y="${gy+4}" font-size="13" text-anchor="end">${v}</text>`}for(let p of selArr){let gx=x(p);svq+=`<line x1="${gx}" x2="${gx}" y1="${Bp}" y2="${Bp+6}" stroke="#999"/><text x="${gx}" y="${Bp+20}" font-size="11" text-anchor="middle">${p}</text>`}svq+=`<line x1="${L}" x2="${R}" y1="${Bp}" y2="${Bp}" stroke="#183329"/>`;svq+=`<text x="${(L+R)/2}" y="${Bp+42}" font-size="14" text-anchor="middle">League position</text><text x="16" y="${(Tp+Bp)/2}" font-size="14" text-anchor="middle" transform="rotate(-90 16 ${(Tp+Bp)/2})">Points after ${m} matches</text>`;for(let d of hist)svq+=`<circle cx="${x(d.pos)}" cy="${yp(d.p)}" r="5" fill="#237c60" fill-opacity="0.22" stroke="#237c60" stroke-opacity="0.22"><title>${label(d.year)}: ${d.name}, ${d.p} points (position ${d.pos})</title></circle>`;for(let d of target)svq+=`<circle cx="${x(d.pos)}" cy="${yp(d.p)}" r="6" fill="#c0392b" stroke="#7f1d1a" stroke-width="1"><title>${label(d.year)}: ${d.name}, ${d.p} points (position ${d.pos})</title></circle>`;let xs=selArr.map(p=>x(p)),inf=1/0,CW=56,bd=selArr.map((p,j)=>{let lD=j?xs[j]-xs[j-1]:inf,rD=j===selArr.length-1?inf:xs[j+1]-xs[j],half=Math.max(0,Math.min(CW/2,lD/2,rD/2));return[xs[j]-half,xs[j]+half]}),st=selArr.map(p=>{let cur=(target.find(d=>d.pos===p)||{}).p,ph=hist.filter(d=>d.pos===p),n=ph.length,gt=ph.filter(d=>d.p>cur).length,eq=ph.filter(d=>d.p===cur).length,lt=ph.filter(d=>d.p<cur).length;return[n?gt/n:null,n?eq/n:null,n?lt/n:null]}),LL=16,T0=628,rh=25,RR=bd[selArr.length-1][1],mixW=(p,t)=>p>50?'rgb(255,255,255)':'rgb('+[0,1,2].map(k=>Math.round(t[k]+(255-t[k])*p/50)).join(',')+')';for(let r=0;r<3;r++){for(let j=0;j<selArr.length;j++){let v=st[j][r],pc=v===null?-1:Math.round(v*100),bgr=r===1||v===null?'#ffffff':r===0?mixW(pc,[192,57,43]):mixW(pc,[41,128,185]);svq+=`<rect x="${bd[j][0]}" y="${T0+r*rh}" width="${bd[j][1]-bd[j][0]}" height="${rh}" fill="${bgr}"/>`}}svq+=`<rect x="${LL}" y="${T0}" width="${RR-LL}" height="${3*rh}" fill="none" stroke="#999"/>`;svq+=`<line x1="${LL}" x2="${RR}" y1="${T0+rh}" y2="${T0+rh}" stroke="#999"/><line x1="${LL}" x2="${RR}" y1="${T0+2*rh}" y2="${T0+2*rh}" stroke="#999"/>`;for(let j=0;j<selArr.length;j++)svq+=`<line x1="${bd[j][0]}" x2="${bd[j][0]}" y1="${T0}" y2="${T0+3*rh}" stroke="#999"/><line x1="${bd[j][1]}" x2="${bd[j][1]}" y1="${T0}" y2="${T0+3*rh}" stroke="#999"/>`;for(let r=0;r<3;r++){svq+=`<text x="${(LL+bd[0][0])/2}" y="${T0+r*rh+17}" font-size="13" text-anchor="middle" fill="#183329">${['>','=','<'][r]}</text>`;for(let j=0;j<selArr.length;j++){let v=st[j][r],pc=v===null?-1:Math.round(v*100);svq+=`<text x="${xs[j]}" y="${T0+r*rh+17}" font-size="12" text-anchor="middle" fill="#183329">${v===null?'–':pc+'%'}</text>`}}svq+=`<text x="${(L+R)/2}" y="724" font-size="12" text-anchor="middle" fill="#52645b">% of historical seasons at this position with > / = / < points than the current season's team</text>`;$('chart').innerHTML=svq;$('chart').style.display='';$('chart-error').hidden=true;$('results-title').textContent=`Points by league position after ${m} matches — ${label(y)} in red`;}
+for(let id of ['m','pos','season','era','size'])$(id).addEventListener('input',draw);
 function parseCSV(text){let rows=[],row=[],v='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){v+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(v);if(row.some(x=>x.trim()))rows.push(row);row=[];v=''}else v+=c}if(quoted)throw Error('Unclosed CSV quote');row.push(v);if(row.some(x=>x.trim()))rows.push(row);return rows}
-function applyCSV(text){text=convertSource(text);let rows=parseCSV(text.replace(/^\uFEFF/,'')),headers=rows.shift().map(x=>x.trim()),required=['Div','Date','HomeTeam','AwayTeam','FTHG','FTAG'];for(let h of required)if(!headers.includes(h))throw Error('Missing column: '+h);let matches=[],names=new Set(),seen=new Set();for(let row of rows){let r=Object.fromEntries(headers.map((h,i)=>[h,(row[i]||'').trim()]));if(r.Div!=='I1')throw Error('Expected Serie A division I1');if(!r.FTHG&&!r.FTAG)continue;if(!/^\d+$/.test(r.FTHG)||!/^\d+$/.test(r.FTAG))throw Error('Invalid full-time goals');let d=r.Date.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);if(!d)throw Error('Invalid date');let year=+d[3];if(year<100)year+=2000;let date=year+'-'+d[2]+'-'+d[1];if(date<'2026-07-01'||date>'2027-06-30'||new Date(date+'T12:00:00Z').toISOString().slice(0,10)!==date)throw Error('Expected valid 2026–27 dates');if(date>new Date().toISOString().slice(0,10))throw Error('Future completed result');if(!r.HomeTeam||!r.AwayTeam||r.HomeTeam===r.AwayTeam)throw Error('Invalid teams');let key=r.HomeTeam+'|'+r.AwayTeam;if(seen.has(key))throw Error('Duplicate fixture');seen.add(key);names.add(r.HomeTeam);names.add(r.AwayTeam);matches.push([date,r.HomeTeam,r.AwayTeam,+r.FTHG,+r.FTAG])}if(names.size!==20||!matches.length)throw Error('Expected results covering all 20 clubs');let teams=[...names].sort();matches.sort((a,b)=>a[0].localeCompare(b[0]));let s={y:2026,teams,matches:matches.map(r=>[r[0],teams.indexOf(r[1]),teams.indexOf(r[2]),r[3],r[4]]),source:'open-matchday'};let counts=teams.map((_,i)=>s.matches.filter(r=>r[1]===i||r[2]===i).length);DATA.seasons[DATA.seasons.findIndex(s=>s.y===2026)]=s;$('season').value='2026';$('m').value=Math.min(...counts);$('p').value='';$('importstatus').textContent=`Loaded ${matches.length} matches through ${matches.at(-1)[0]}. Clubs have ${Math.min(...counts)}–${Math.max(...counts)} games. Source: Open Matchday. Loaded automatically.`;draw()}
+function applyCSV(text){text=convertSource(text);let rows=parseCSV(text.replace(/^\uFEFF/,'')),headers=rows.shift().map(x=>x.trim()),required=['Div','Date','HomeTeam','AwayTeam','FTHG','FTAG'];for(let h of required)if(!headers.includes(h))throw Error('Missing column: '+h);let matches=[],names=new Set(),seen=new Set();for(let row of rows){let r=Object.fromEntries(headers.map((h,i)=>[h,(row[i]||'').trim()]));if(r.Div!=='I1')throw Error('Expected Serie A division I1');if(!r.FTHG&&!r.FTAG)continue;if(!/^\d+$/.test(r.FTHG)||!/^\d+$/.test(r.FTAG))throw Error('Invalid full-time goals');let d=r.Date.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);if(!d)throw Error('Invalid date');let year=+d[3];if(year<100)year+=2000;let date=year+'-'+d[2]+'-'+d[1];if(date<'2026-07-01'||date>'2027-06-30'||new Date(date+'T12:00:00Z').toISOString().slice(0,10)!==date)throw Error('Expected valid 2026–27 dates');if(date>new Date().toISOString().slice(0,10))throw Error('Future completed result');if(!r.HomeTeam||!r.AwayTeam||r.HomeTeam===r.AwayTeam)throw Error('Invalid teams');let key=r.HomeTeam+'|'+r.AwayTeam;if(seen.has(key))throw Error('Duplicate fixture');seen.add(key);names.add(r.HomeTeam);names.add(r.AwayTeam);matches.push([date,r.HomeTeam,r.AwayTeam,+r.FTHG,+r.FTAG])}if(names.size!==20||!matches.length)throw Error('Expected results covering all 20 clubs');let teams=[...names].sort();matches.sort((a,b)=>a[0].localeCompare(b[0]));let s={y:2026,teams,matches:matches.map(r=>[r[0],teams.indexOf(r[1]),teams.indexOf(r[2]),r[3],r[4]]),source:'open-matchday'};let counts=teams.map((_,i)=>s.matches.filter(r=>r[1]===i||r[2]===i).length);DATA.seasons[DATA.seasons.findIndex(s=>s.y===2026)]=s;$('season').value='2026';$('m').value=Math.min(...counts);$('importstatus').textContent=`Loaded ${matches.length} matches through ${matches.at(-1)[0]}. Clubs have ${Math.min(...counts)}–${Math.max(...counts)} games. Source: Open Matchday. Loaded automatically.`;draw()}
 function convertSource(text){const rows=parseCSV(text),h=rows.shift();for(const k of ['date','home','away','ft_home','ft_away'])if(!h.includes(k))throw Error('Unexpected source columns');const quote=v=>'"'+String(v).replaceAll('"','""')+'"';return ['Div,Date,HomeTeam,AwayTeam,FTHG,FTAG',...rows.map(row=>{const r=Object.fromEntries(h.map((k,i)=>[k,row[i]||'']));if(!/^\d{4}-\d{2}-\d{2}$/.test(r.date))throw Error('Invalid source date');return ['I1',r.date.slice(8)+'/'+r.date.slice(5,7)+'/'+r.date.slice(0,4),r.home,r.away,r.ft_home,r.ft_away].map(quote).join(',')})].join('\n')}
 const sourcePath='oladeeayo/open-matchday/master/data/ITA_1_serie-a/results_2627.csv';
 const urls=['https://raw.githubusercontent.com/'+sourcePath,'https://cdn.jsdelivr.net/gh/oladeeayo/open-matchday@master/data/ITA_1_serie-a/results_2627.csv'];
 function coverage(){const s=DATA.seasons.find(s=>s.y===2026);return s.matches.length+' matches through '+s.matches.at(-1)[0]}
 let updating=false;
-async function refresh(){if(updating)return;updating=true;$('refresh').disabled=true;let success=false;try{for(const url of urls){try{const response=await fetch(url,{signal:AbortSignal.timeout(12000),cache:'no-cache'});if(!response.ok)throw Error('HTTP '+response.status);const text=await response.text();const old=DATA.seasons.find(s=>s.y===2026);const count=parseCSV(text).length-1;if(count<old.matches.length)throw Error('Older or incomplete snapshot');const controls=['season','m','p'].map(id=>$(id).value);applyCSV(text);['season','m','p'].forEach((id,i)=>$(id).value=controls[i]);draw();$('importstatus').textContent='Open Matchday: '+coverage()+'. Checked '+new Date().toLocaleString()+'. Updates checked hourly while open.';success=true;break}catch(e){console.warn('Results refresh failed',url,e.message)}}if(!success)$('importstatus').textContent='Update unavailable. Retaining '+coverage()+' from the embedded or last successful snapshot.'}finally{updating=false;$('refresh').disabled=false}}
+async function refresh(){if(updating)return;updating=true;$('refresh').disabled=true;let success=false;try{for(const url of urls){try{const response=await fetch(url,{signal:AbortSignal.timeout(12000),cache:'no-cache'});if(!response.ok)throw Error('HTTP '+response.status);const text=await response.text();const old=DATA.seasons.find(s=>s.y===2026);const count=parseCSV(text).length-1;if(count<old.matches.length)throw Error('Older or incomplete snapshot');const controls=['season','m'].map(id=>$(id).value);applyCSV(text);['season','m'].forEach((id,i)=>$(id).value=controls[i]);draw();$('importstatus').textContent='Open Matchday: '+coverage()+'. Checked '+new Date().toLocaleString()+'. Updates checked hourly while open.';success=true;break}catch(e){console.warn('Results refresh failed',url,e.message)}}if(!success)$('importstatus').textContent='Update unavailable. Retaining '+coverage()+' from the embedded or last successful snapshot.'}finally{updating=false;$('refresh').disabled=false}}
 $('refresh').onclick=refresh;draw();$('importstatus').textContent='Embedded Open Matchday snapshot: '+coverage()+'. Checking updates…';refresh();setInterval(refresh,3600000);
   </script>
 </body>

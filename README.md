@@ -8,8 +8,10 @@ This repository is configured as a GitHub Pages site. Push the default branch to
 
 ## What's inside
 
-- `index.html` — a single self-contained HTML file (CSS + embedded dataset + app logic). No build step needed; host it as-is on static hosting.
-- Embedded dataset: 2025–26 and earlier seasons plus a current-season snapshot.
+- `index.html` — main overview page: plots points at every league position (1st → last) after M matches, one dot per historical season, with the chosen season highlighted in red. Controls: matches, target season, era and league-size filters.
+- `analysis.html` — the interactive single-position tool: compare points P at position n after M matches and open the season-by-season evidence table. Links back to the main page.
+- Each page is a single self-contained HTML file (CSS + embedded dataset + app logic). No build step needed; host them as-is on static hosting.
+- Embedded dataset: 2025–26 and earlier seasons plus a current-season snapshot (contained in each page).
 
 ## Data provenance
 
