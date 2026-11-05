@@ -15,7 +15,7 @@ This repository is configured as a GitHub Pages site. Push the default branch to
 
 ## Data provenance
 
-Historical seasons (to 2025–26): [engsoccerdata](https://github.com/jalapic/engsoccerdata) (James P. Curley; non-commercial), with 2025–26 from [Openfootball](https://github.com/openfootball/italy). Current season (2026–27): [Open Matchday contributors](https://github.com/oladeeayo/open-matchday), fetched on load and hourly (jsDelivr fallback); third-party results, not an official feed.
+Historical seasons (to 2025–26): [engsoccerdata](https://github.com/jalapic/engsoccerdata) (James P. Curley; non-commercial), with 2025–26 from [Openfootball](https://github.com/openfootball/italy). Current season (2026–27): [Open Matchday contributors](https://github.com/oladeeayo/open-matchday), fetched on load and hourly, with a CDN fallback; third-party results, not an official feed.
 
 ## Editing guide
 
